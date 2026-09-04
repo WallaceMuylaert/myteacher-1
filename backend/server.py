@@ -2,9 +2,10 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.core import database
-from backend.models import users, classes, students, enrollments, attendance, payments, plans, config
+from backend.models import users, classes, students, enrollments, attendance, payments, plans, config, calendar
 from backend.core.router_loader import include_routers
 from backend.core.logger import logger, log_error_with_traceback
+from backend.core.config import settings
 
 from contextlib import asynccontextmanager
 from backend.core.init_db import init_db
@@ -38,14 +39,14 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="MyTeacher API",
     description="API para gerenciamento de alunos e turmas",
-    version="2.0.1",
+    version="2.0.2",
     lifespan=lifespan
 )
 
-cors_origins_env = os.getenv("CORS_ORIGINS", "")
+cors_origins_env = settings.CORS_ORIGINS or os.getenv("CORS_ORIGINS", "")
 if cors_origins_env:
     # Produção: usa origens específicas do .env
-    origins = [origin.strip() for origin in cors_origins_env.split(",")]
+    origins = [origin.strip() for origin in cors_origins_env.split(",") if origin.strip()]
 else:
     # Desenvolvimento: permite todas as origens
     origins = ["*"]

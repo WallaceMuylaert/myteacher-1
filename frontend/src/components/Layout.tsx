@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate, useLocation, Outlet } from 'react-router-dom';
-import { LogOut, LayoutDashboard, GraduationCap, Menu, X, ChevronLeft, ChevronRight, Settings, UserCircle, DollarSign, MessageCircle, Users } from 'lucide-react';
+import { LogOut, LayoutDashboard, GraduationCap, Menu, X, ChevronLeft, ChevronRight, Settings, UserCircle, DollarSign, MessageCircle, Users, Calendar } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { openSupportWhatsApp } from '../utils/support';
 
@@ -18,6 +18,7 @@ type NavEntry = {
 // para o portal do aluno.
 const NAV: NavEntry[] = [
     { to: '/dashboard', label: 'Painel', short: 'Painel', icon: LayoutDashboard, match: p => p === '/dashboard' },
+    { to: '/dashboard/agenda', label: 'Agenda', short: 'Agenda', icon: Calendar, match: p => p.includes('/agenda') },
     { to: '/dashboard/classes', label: 'Turmas', short: 'Turmas', icon: GraduationCap, match: p => p.includes('/classes') || p.includes('/class/') },
     { to: '/dashboard/students', label: 'Alunos', short: 'Alunos', icon: Users, match: p => p.includes('/students') },
     { to: '/dashboard/payments', label: 'Financeiro', short: 'Financeiro', icon: DollarSign, match: p => p.includes('/payments') },
@@ -160,7 +161,7 @@ export const Layout = () => {
                 className="md:hidden fixed bottom-0 left-0 right-0 z-50 sheet-footer-nav flex items-stretch justify-around px-1"
                 style={{ paddingBottom: 'env(safe-area-inset-bottom, 6px)' }}
             >
-                {entries.slice(0, 4).map(({ to, short, icon: Icon, match }) => {
+                {entries.slice(0, 5).map(({ to, short, icon: Icon, match }) => {
                     const active = match(location.pathname);
                     return (
                         <Link

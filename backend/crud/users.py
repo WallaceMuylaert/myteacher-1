@@ -8,11 +8,14 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 from sqlalchemy import or_
 
 def get_user_by_email(db: Session, email: str):
-    return db.query(User).filter(User.email == email).first()
+    return db.query(User).filter(User.email.ilike(email)).first()
+
+def get_user_by_google_id(db: Session, google_id: str):
+    return db.query(User).filter(User.google_id == google_id).first()
 
 def get_user_by_nickname(db: Session, nickname: str):
     return db.query(User).filter(
-        or_(User.nickname == nickname, User.email == nickname)
+        or_(User.email.ilike(nickname), User.nickname == nickname)
     ).first()
 
 def get_users(db: Session, skip: int = 0, limit: int = 100, search: str = None):
@@ -27,13 +30,16 @@ def get_users(db: Session, skip: int = 0, limit: int = 100, search: str = None):
     return query.offset(skip).limit(limit).all()
 
 def create_user(db: Session, user: UserCreate):
-    hashed_password = pwd_context.hash(user.password)
+    hashed_password = pwd_context.hash(user.password) if user.password else None
     db_user = User(
-        email=user.email,
+        email=user.email.strip().lower(),
         hashed_password=hashed_password,
         full_name=user.full_name,
         birth_date=user.birth_date,
         nickname=user.nickname,
+        avatar=user.avatar,
+        google_id=user.google_id,
+        auth_provider=user.auth_provider or "local",
         is_trial=user.is_trial if user.is_trial else False,
         trial_started_at=datetime.utcnow() if user.is_trial else None
     )

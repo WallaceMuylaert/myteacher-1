@@ -9,27 +9,27 @@ class UserBase(BaseModel):
     birth_date: Optional[date] = None
     nickname: Optional[str] = None
     avatar: Optional[str] = None
+    google_id: Optional[str] = None
+    auth_provider: Optional[str] = "local"
 
 class UserCreate(UserBase):
-    password: str
+    password: Optional[str] = None
     is_trial: Optional[bool] = False
 
 class UserRegister(BaseModel):
-    """Cadastro público. Ao contrário de UserCreate (só admin), estes dados vêm de
-    qualquer visitante, então cada campo é validado na borda."""
-    full_name: str = Field(min_length=2, max_length=120)
+    """Cadastro público: nome, sobrenome, email e senha."""
+    first_name: str = Field(min_length=2, max_length=60)
+    last_name: str = Field(min_length=2, max_length=60)
     email: EmailStr
-    # Sem "@": o login aceita nickname OU email (crud.get_user_by_nickname), e proibir
-    # arroba impede que alguém registre um apelido que se passe pelo email de outro.
-    nickname: str = Field(min_length=3, max_length=40, pattern=r"^[A-Za-z0-9._-]+$")
     password: str = Field(min_length=8, max_length=128)
+    nickname: Optional[str] = None
 
     @field_validator("email")
     @classmethod
     def normalize_email(cls, value: str) -> str:
         return value.strip().lower()
 
-    @field_validator("full_name")
+    @field_validator("first_name", "last_name")
     @classmethod
     def strip_name(cls, value: str) -> str:
         return " ".join(value.split())

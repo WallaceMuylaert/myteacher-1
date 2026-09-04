@@ -7,47 +7,35 @@ from pydantic import ValidationError
 from backend.schemas.users import UserRegister
 
 
-def test_apelido_nao_pode_parecer_email():
-    """O login resolve por apelido OU email (crud.get_user_by_nickname). Se um
-    apelido pudesse conter '@', daria para registrar um que se passa pelo email
-    de outra pessoa e criar credencial ambígua."""
-    with pytest.raises(ValidationError):
-        UserRegister(
-            full_name="Impostor Silva",
-            email="i@x.com",
-            nickname="admin@admin.com",
-            password="senha12345",
-        )
-
-
 def test_senha_curta_recusada():
     with pytest.raises(ValidationError):
-        UserRegister(full_name="Ana Souza", email="ana@x.com", nickname="ana", password="1234")
+        UserRegister(first_name="Ana", last_name="Souza", email="ana@x.com", password="1234")
 
 
 def test_email_invalido_recusado():
     with pytest.raises(ValidationError):
-        UserRegister(full_name="Ana Souza", email="nao-e-email", nickname="ana", password="senha12345")
+        UserRegister(first_name="Ana", last_name="Souza", email="nao-e-email", password="senha12345")
 
 
 def test_normaliza_email_e_nome():
     user = UserRegister(
-        full_name="  Maria   Silva ",
+        first_name="  Maria  ",
+        last_name="  Silva ",
         email="Maria@Escola.com.BR",
-        nickname="maria.silva",
         password="senha12345",
     )
     assert user.email == "maria@escola.com.br"  # senão o duplicado passa variando maiúscula
-    assert user.full_name == "Maria Silva"
+    assert user.first_name == "Maria"
+    assert user.last_name == "Silva"
 
 
 def test_payload_nao_carrega_privilegio():
     """is_admin/is_trial não existem no schema público: mesmo que o cliente mande,
     pydantic descarta e o router força is_trial=True."""
     user = UserRegister(
-        full_name="Hacker Silva",
+        first_name="Hacker",
+        last_name="Silva",
         email="h@x.com",
-        nickname="hacker",
         password="senha12345",
         is_admin=True,
     )

@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { GraduationCap, ArrowLeft, User, Mail, AtSign, Lock, Loader2, CheckCircle } from 'lucide-react';
+import { GraduationCap, ArrowLeft, User, Mail, Lock, Loader2, CheckCircle } from 'lucide-react';
 import api from '../api';
 import { useAuth } from '../context/AuthContext';
 
@@ -15,12 +15,17 @@ export const Register = () => {
     // pagamento acontece quando o teste acaba.
     const planName = (location.state as { planName?: string } | null)?.planName;
 
-    const [form, setForm] = useState({ full_name: '', email: '', nickname: '', password: '' });
+    const [form, setForm] = useState({ first_name: '', last_name: '', email: '', password: '' });
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
 
     const set = (field: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
         setForm((prev) => ({ ...prev, [field]: e.target.value }));
+
+    const handleGoogleLogin = () => {
+        const apiUrl = import.meta.env.VITE_API_URL || '/api';
+        window.location.href = `${apiUrl}/auth/google`;
+    };
 
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
@@ -34,8 +39,8 @@ export const Register = () => {
         setLoading(true);
         try {
             await api.post('/register', form);
-            // Entra direto: o valor tem que vir antes de qualquer outra tela.
-            await login(form.nickname, form.password);
+            // Entra direto com email e senha
+            await login(form.email, form.password);
             navigate('/dashboard');
         } catch (err: any) {
             if (err.code === 'ERR_NETWORK' || !err.response) {
@@ -43,7 +48,7 @@ export const Register = () => {
             } else if (err.response.status === 409) {
                 setError(err.response.data.detail);
             } else if (err.response.status === 422) {
-                setError('Confira os dados: o usuário aceita apenas letras, números, ponto, hífen e underscore.');
+                setError('Confira os dados preenchidos e tente novamente.');
             } else {
                 setError(err.response.data?.detail || 'Não foi possível criar sua conta. Tente de novo.');
             }
@@ -52,26 +57,19 @@ export const Register = () => {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-bg-dark text-text-main p-6 relative overflow-hidden">
-            <div className="absolute top-[-20%] left-[-20%] w-[600px] h-[600px] bg-primary/10 rounded-full blur-[100px]"></div>
+        <div className="min-h-screen flex flex-col items-center justify-center bg-bg-dark text-text-main p-4 py-6 relative overflow-y-auto">
+            <div className="w-full max-w-[400px] animate-fade-in relative z-10">
+                {/* Header Logo */}
+                <div className="flex items-center justify-center gap-2 mb-3 text-primary font-bold text-lg">
+                    <GraduationCap size={24} className="text-primary" />
+                    <span className="text-text-main">MyTeacherApp</span>
+                </div>
 
-            <div className="relative z-10 w-full max-w-md animate-fade-in">
-                <button
-                    onClick={() => navigate('/')}
-                    className="mb-6 flex items-center gap-2 rounded-[2px] px-2 py-2 text-text-muted transition-colors hover:text-text-main focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
-                >
-                    <ArrowLeft size={20} /> Voltar
-                </button>
-
-                <div className="sheet sheet-p">
-                    <div className="text-center">
-                        <div className="mb-4 flex justify-center">
-                            <div className="flex h-16 w-16 items-center justify-center rounded-[3px] border border-primary/30 bg-primary/20 text-primary">
-                                <GraduationCap size={32} />
-                            </div>
-                        </div>
-                        <h1 className="text-3xl font-bold">Criar conta</h1>
-                        <p className="mt-2 text-text-muted">
+                {/* Card */}
+                <div className="bg-bg-card border border-rule-strong rounded-[3px] p-5 sm:p-6 shadow-xl">
+                    <div className="text-center mb-3">
+                        <h1 className="text-xl font-bold text-text-main">Criar conta</h1>
+                        <p className="text-xs text-text-muted mt-0.5">
                             {planName ? (
                                 <>Plano <strong className="text-text-main">{planName}</strong>. </>
                             ) : null}
@@ -82,43 +80,88 @@ export const Register = () => {
                     {error && (
                         <div
                             role="alert"
-                            className="mt-6 rounded-[2px] border border-danger/20 bg-danger/10 p-4 text-sm text-danger"
+                            className="mb-3 rounded-[2px] border border-danger/20 bg-danger/10 p-2.5 text-xs text-danger"
                         >
                             {error}
                         </div>
                     )}
 
-                    <form onSubmit={handleSubmit} className="mt-6 space-y-5">
-                        <div className="space-y-1">
-                            <label htmlFor="full_name" className="ml-1 text-sm font-medium text-text-muted">
-                                Seu nome
-                            </label>
-                            <div className="relative">
-                                <User size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted" />
-                                <input
-                                    id="full_name"
-                                    className="input pl-12"
-                                    value={form.full_name}
-                                    onChange={set('full_name')}
-                                    required
-                                    minLength={2}
-                                    maxLength={120}
-                                    autoComplete="name"
-                                    placeholder="Maria Silva"
-                                />
+                    {/* Botão Google */}
+                    <div>
+                        <button
+                            type="button"
+                            onClick={handleGoogleLogin}
+                            className="w-full flex items-center justify-center gap-2.5 bg-bg-dark hover:bg-[var(--wash-2)] border border-border text-text-main font-semibold py-2 px-3 rounded-[2px] text-xs transition-colors shadow-sm cursor-pointer"
+                        >
+                            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.16v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.16C1.43 8.55 1 10.22 1 12s.43 3.45 1.16 4.93l2.85-2.22.83-.62z" fill="#FBBC05"/>
+                                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.16 7.07l3.68 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                            </svg>
+                            <span>Continuar com o Google</span>
+                        </button>
+                    </div>
+
+                    <div className="relative flex items-center my-3.5">
+                        <div className="flex-grow border-t border-border"></div>
+                        <span className="flex-shrink-0 mx-3 text-text-muted text-[10px] font-bold uppercase tracking-wider">ou</span>
+                        <div className="flex-grow border-t border-border"></div>
+                    </div>
+
+                    <form onSubmit={handleSubmit} className="space-y-3">
+                        <div className="grid grid-cols-2 gap-2.5">
+                            <div>
+                                <label htmlFor="first_name" className="block text-[11px] font-medium text-text-muted mb-1">
+                                    Nome
+                                </label>
+                                <div className="relative">
+                                    <User size={15} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />
+                                    <input
+                                        id="first_name"
+                                        className="w-full pl-8 pr-2.5 py-1.5 bg-bg-dark border border-border rounded-[2px] text-xs text-text-main focus:border-primary focus:outline-none placeholder:text-text-muted/40"
+                                        value={form.first_name}
+                                        onChange={set('first_name')}
+                                        required
+                                        minLength={2}
+                                        maxLength={60}
+                                        autoComplete="given-name"
+                                        placeholder="Maria"
+                                    />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label htmlFor="last_name" className="block text-[11px] font-medium text-text-muted mb-1">
+                                    Sobrenome
+                                </label>
+                                <div className="relative">
+                                    <User size={15} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />
+                                    <input
+                                        id="last_name"
+                                        className="w-full pl-8 pr-2.5 py-1.5 bg-bg-dark border border-border rounded-[2px] text-xs text-text-main focus:border-primary focus:outline-none placeholder:text-text-muted/40"
+                                        value={form.last_name}
+                                        onChange={set('last_name')}
+                                        required
+                                        minLength={2}
+                                        maxLength={60}
+                                        autoComplete="family-name"
+                                        placeholder="Silva"
+                                    />
+                                </div>
                             </div>
                         </div>
 
-                        <div className="space-y-1">
-                            <label htmlFor="email" className="ml-1 text-sm font-medium text-text-muted">
+                        <div>
+                            <label htmlFor="email" className="block text-[11px] font-medium text-text-muted mb-1">
                                 E-mail
                             </label>
                             <div className="relative">
-                                <Mail size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted" />
+                                <Mail size={15} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />
                                 <input
                                     id="email"
                                     type="email"
-                                    className="input pl-12"
+                                    className="w-full pl-8 pr-2.5 py-1.5 bg-bg-dark border border-border rounded-[2px] text-xs text-text-main focus:border-primary focus:outline-none placeholder:text-text-muted/40"
                                     value={form.email}
                                     onChange={set('email')}
                                     required
@@ -128,50 +171,26 @@ export const Register = () => {
                             </div>
                         </div>
 
-                        <div className="space-y-1">
-                            <label htmlFor="nickname" className="ml-1 text-sm font-medium text-text-muted">
-                                Usuário
-                            </label>
-                            <div className="relative">
-                                <AtSign size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted" />
-                                <input
-                                    id="nickname"
-                                    className="input pl-12"
-                                    value={form.nickname}
-                                    onChange={set('nickname')}
-                                    required
-                                    minLength={3}
-                                    maxLength={40}
-                                    pattern="[A-Za-z0-9._\-]+"
-                                    autoComplete="username"
-                                    placeholder="maria.silva"
-                                    aria-describedby="nickname-hint"
-                                />
-                            </div>
-                            <p id="nickname-hint" className="ml-1 text-xs text-text-muted">
-                                É com ele que você entra no sistema. Letras, números, ponto, hífen e underscore.
-                            </p>
-                        </div>
-
-                        <div className="space-y-1">
-                            <label htmlFor="password" className="ml-1 text-sm font-medium text-text-muted">
+                        <div>
+                            <label htmlFor="password" className="block text-[11px] font-medium text-text-muted mb-1">
                                 Senha
                             </label>
                             <div className="relative">
-                                <Lock size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted" />
+                                <Lock size={15} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />
                                 <input
                                     id="password"
                                     type="password"
-                                    className="input pl-12"
+                                    className="w-full pl-8 pr-2.5 py-1.5 bg-bg-dark border border-border rounded-[2px] text-xs text-text-main focus:border-primary focus:outline-none placeholder:text-text-muted/40"
                                     value={form.password}
                                     onChange={set('password')}
                                     required
                                     minLength={8}
                                     autoComplete="new-password"
                                     aria-describedby="password-hint"
+                                    placeholder="••••••••"
                                 />
                             </div>
-                            <p id="password-hint" className="ml-1 text-xs text-text-muted">
+                            <p id="password-hint" className="text-[10px] text-text-muted mt-0.5">
                                 Mínimo de 8 caracteres.
                             </p>
                         </div>
@@ -179,31 +198,40 @@ export const Register = () => {
                         <button
                             type="submit"
                             disabled={loading}
-                            className="btn btn-primary flex w-full items-center justify-center gap-2 rounded-[2px] px-6 py-3.5 text-base font-bold disabled:pointer-events-none disabled:opacity-60 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                            className="btn btn-primary w-full flex items-center justify-center gap-2 py-2 px-4 text-xs font-bold rounded-[2px] disabled:pointer-events-none disabled:opacity-60 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 mt-2"
                         >
                             {loading ? (
                                 <>
-                                    <Loader2 size={20} className="animate-spin" />
+                                    <Loader2 size={16} className="animate-spin" />
                                     Criando sua conta...
                                 </>
                             ) : (
                                 <>
-                                    <CheckCircle size={20} />
+                                    <CheckCircle size={16} />
                                     Começar {TRIAL_DAYS} dias grátis
                                 </>
                             )}
                         </button>
                     </form>
 
-                    <p className="mt-6 text-center text-sm text-text-muted">
+                    <p className="mt-4 text-center text-xs text-text-muted">
                         Já tem conta?{' '}
                         <button
                             onClick={() => navigate('/login')}
-                            className="rounded font-semibold text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                            className="font-semibold text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
                         >
                             Entrar
                         </button>
                     </p>
+                </div>
+
+                <div className="text-center mt-3">
+                    <button
+                        onClick={() => navigate('/')}
+                        className="inline-flex items-center gap-1.5 text-xs text-text-muted hover:text-text-main transition-colors"
+                    >
+                        <ArrowLeft size={14} /> Voltar para o início
+                    </button>
                 </div>
             </div>
         </div>

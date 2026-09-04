@@ -11,6 +11,7 @@ const Landing = lazy(() => import('./pages/Landing').then(m => ({ default: m.Lan
 const Login = lazy(() => import('./pages/Login'));
 const Dashboard = lazy(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })));
 const Classes = lazy(() => import('./pages/Classes').then(m => ({ default: m.Classes })));
+const Agenda = lazy(() => import('./pages/Agenda').then(m => ({ default: m.Agenda })));
 const ClassDetails = lazy(() => import('./pages/ClassDetails').then(m => ({ default: m.ClassDetails })));
 const Students = lazy(() => import('./pages/Students').then(m => ({ default: m.Students })));
 const Payments = lazy(() => import('./pages/Payments').then(m => ({ default: m.Payments })));
@@ -23,6 +24,7 @@ const TrialExpired = lazy(() => import('./pages/TrialExpired').then(m => ({ defa
 const Pricing = lazy(() => import('./pages/Pricing'));
 const Register = lazy(() => import('./pages/Register'));
 const CheckoutSuccess = lazy(() => import('./pages/CheckoutSuccess').then(m => ({ default: m.CheckoutSuccess })));
+const OAuthCallback = lazy(() => import('./pages/OAuthCallback'));
 
 // Layouts
 import { Layout } from './components/Layout';
@@ -67,6 +69,7 @@ function AppRoutes() {
       <Route path="/login" element={<Login />} />
       <Route path="/pricing" element={<Pricing />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/auth/callback" element={<OAuthCallback />} />
       <Route path="/trial-expired" element={<TrialExpired />} />
       <Route path="/checkout/success" element={<CheckoutSuccess />} />
 
@@ -88,6 +91,7 @@ function AppRoutes() {
         </ProtectedRoute>
       }>
         <Route index element={<Dashboard />} />
+        <Route path="agenda" element={<Agenda />} />
         <Route path="classes" element={<Classes />} />
         <Route path="class/:id" element={<ClassDetails />} />
         <Route path="students" element={<Students />} />

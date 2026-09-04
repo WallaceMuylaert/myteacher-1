@@ -7,7 +7,7 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True)
-    hashed_password = Column(String)
+    hashed_password = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
     is_admin = Column(Boolean, default=False)
     is_trial = Column(Boolean, default=False)
@@ -25,6 +25,11 @@ class User(Base):
     birth_date = Column(Date, nullable=True)
     nickname = Column(String, nullable=True)
     avatar = Column(String, nullable=True)
+    google_id = Column(String, unique=True, index=True, nullable=True)
+    auth_provider = Column(String, default="local")
+    google_access_token = Column(String, nullable=True)
+    google_refresh_token = Column(String, nullable=True)
 
     owned_classes = relationship("Class", back_populates="owner")
     students = relationship("Student", back_populates="owner")
+    calendar_events = relationship("CalendarEvent", back_populates="user", cascade="all, delete-orphan")

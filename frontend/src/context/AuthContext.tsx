@@ -19,9 +19,10 @@ interface User {
 
 interface AuthContextType {
     user: User | null;
-    login: (nickname: string, password: string) => Promise<void>;
+    login: (email: string, password: string) => Promise<void>;
     logout: () => void;
     updateUser: (userData: Partial<User>) => void;
+    refreshUser: () => Promise<void>;
     isLoading: boolean;
     isTrialExpired: boolean;
 }
@@ -33,36 +34,48 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [isTrialExpired, setIsTrialExpired] = useState(false);
 
-    useEffect(() => {
+    const refreshUser = async () => {
         const token = localStorage.getItem('token');
         if (token) {
-            api.get('/users/me')
-                .then(res => {
-                    setUser(res.data);
-                    // Verificar se trial expirou via dados do user
-                    if (res.data.trial_expired) {
-                        setIsTrialExpired(true);
-                    }
-                })
-                .catch((err) => {
-                    // Se backend retornou 403 TRIAL_EXPIRED
-                    if (err.response?.status === 403 && err.response?.data?.detail === 'TRIAL_EXPIRED') {
-                        setIsTrialExpired(true);
-                    } else {
-                        localStorage.removeItem('token');
-                    }
-                    setUser(null);
-                })
-                .finally(() => setIsLoading(false));
+            try {
+                const res = await api.get('/users/me');
+                setUser(res.data);
+                if (res.data.trial_expired) {
+                    setIsTrialExpired(true);
+                } else {
+                    setIsTrialExpired(false);
+                }
+            } catch (err: any) {
+                if (err.response?.status === 403 && err.response?.data?.detail === 'TRIAL_EXPIRED') {
+                    setIsTrialExpired(true);
+                } else {
+                    localStorage.removeItem('token');
+                }
+                setUser(null);
+            } finally {
+                setIsLoading(false);
+            }
         } else {
+            setUser(null);
             setIsLoading(false);
         }
+    };
+
+    useEffect(() => {
+        refreshUser();
+
+        const handleStorageChange = () => {
+            refreshUser();
+        };
+
+        window.addEventListener('storage', handleStorageChange);
+        return () => window.removeEventListener('storage', handleStorageChange);
     }, []);
 
-    const login = async (nickname: string, password: string) => {
+    const login = async (email: string, password: string) => {
         try {
             const params = new URLSearchParams();
-            params.append('username', nickname);
+            params.append('username', email);
             params.append('password', password);
 
             const res = await api.post('/token', params);
@@ -104,7 +117,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
 
     return (
-        <AuthContext.Provider value={{ user, login, logout, updateUser, isLoading, isTrialExpired }}>
+        <AuthContext.Provider value={{ user, login, logout, updateUser, refreshUser, isLoading, isTrialExpired }}>
             {children}
         </AuthContext.Provider>
     );

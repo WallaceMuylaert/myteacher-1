@@ -471,9 +471,12 @@ export const Agenda = () => {
 
           {/* Google Status Badge */}
           {googleConnected ? (
-            <div className="flex items-center gap-1.5 px-2 py-1 rounded-[2px] bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-medium">
+            <div
+              className="flex items-center gap-1.5 px-2 py-1 rounded-[2px] bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-medium"
+              title={googleEmail ? `Conectado como ${googleEmail}` : 'Google Agenda conectado'}
+            >
               <CheckCircle2 size={12} />
-              <span className="hidden sm:inline">Google Conectado</span>
+              <span className="hidden sm:inline">{googleEmail ? (googleEmail.length > 20 ? `${googleEmail.slice(0, 18)}...` : googleEmail) : 'Google Conectado'}</span>
               <button
                 onClick={() => {
                   setIsSyncing(true);

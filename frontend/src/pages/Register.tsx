@@ -58,6 +58,18 @@ export const Register = () => {
 
     return (
         <div className="min-h-screen flex flex-col items-center justify-center bg-bg-dark text-text-main p-4 py-6 relative overflow-y-auto">
+            {/* Botão Voltar no Canto Superior Esquerdo */}
+            <div className="fixed top-4 left-4 sm:top-6 sm:left-6 z-20">
+                <button
+                    type="button"
+                    onClick={() => navigate('/')}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-text-muted hover:text-primary bg-bg-card/80 hover:bg-bg-card border border-rule-subtle rounded-[3px] backdrop-blur-sm transition-all shadow-sm cursor-pointer"
+                >
+                    <ArrowLeft size={15} />
+                    <span>Voltar para o início</span>
+                </button>
+            </div>
+
             <div className="w-full max-w-[400px] animate-fade-in relative z-10">
                 {/* Header Logo */}
                 <div className="flex items-center justify-center gap-2 mb-3 text-primary font-bold text-lg">

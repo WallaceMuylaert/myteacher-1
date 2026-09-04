@@ -2,7 +2,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, GraduationCap } from 'lucide-react';
+import { Eye, EyeOff, GraduationCap, ArrowLeft } from 'lucide-react';
 import {
     Alert,
     Box,
@@ -159,8 +159,38 @@ export const Login = () => {
                     justifyContent: 'center',
                     p: 2,
                     bgcolor: 'background.default',
+                    position: 'relative',
                 }}
             >
+                {/* Botão Voltar no Canto Superior Esquerdo */}
+                <Box sx={{ position: 'fixed', top: { xs: 16, sm: 24 }, left: { xs: 16, sm: 24 }, zIndex: 50 }}>
+                    <Button
+                        startIcon={<ArrowLeft size={16} />}
+                        onClick={() => navigate('/')}
+                        sx={{
+                            color: 'text.secondary',
+                            textTransform: 'none',
+                            fontWeight: 600,
+                            fontSize: '0.85rem',
+                            px: 1.5,
+                            py: 0.75,
+                            borderRadius: 1.5,
+                            border: '1px solid',
+                            borderColor: muiTheme.palette.mode === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
+                            bgcolor: muiTheme.palette.mode === 'dark' ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.85)',
+                            backdropFilter: 'blur(8px)',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+                            '&:hover': {
+                                color: 'primary.main',
+                                borderColor: 'primary.main',
+                                bgcolor: muiTheme.palette.mode === 'dark' ? 'rgba(255,255,255,0.08)' : '#ffffff',
+                            }
+                        }}
+                    >
+                        Voltar para o início
+                    </Button>
+                </Box>
+
                 <Box sx={{ width: '100%', maxWidth: 400 }}>
                     <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'center', mb: 3 }}>
                         <GraduationCap size={26} color={muiTheme.palette.primary.main} />

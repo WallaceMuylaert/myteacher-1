@@ -257,10 +257,41 @@ export const Agenda = () => {
     }
   };
 
+  // Ouvir mensagem do popup de autenticação Google
+  useEffect(() => {
+    const handleAuthMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      if (event.data?.type === 'GOOGLE_AUTH_SUCCESS') {
+        setToast({ message: 'Conta Google conectada com sucesso! Sincronizando agenda...', type: 'success' });
+        loadCalendarData();
+      } else if (event.data?.type === 'GOOGLE_AUTH_ERROR') {
+        setToast({ message: 'Falha ao autenticar com o Google.', type: 'error' });
+      }
+    };
+    window.addEventListener('message', handleAuthMessage);
+    return () => window.removeEventListener('message', handleAuthMessage);
+  }, [loadCalendarData]);
+
   // Conectar com Google
   const handleConnectGoogle = () => {
-    const apiUrl = import.meta.env.VITE_API_URL || '/api';
-    window.location.href = `${apiUrl}/auth/google`;
+    const rawApiUrl = import.meta.env.VITE_API_URL || '/api';
+    const apiUrl = rawApiUrl.endsWith('/') ? rawApiUrl.slice(0, -1) : rawApiUrl;
+    const token = localStorage.getItem('token') || '';
+    const width = 500;
+    const height = 650;
+    const left = window.screenX + (window.outerWidth - width) / 2;
+    const top = window.screenY + (window.outerHeight - height) / 2;
+
+    const popup = window.open(
+      `${apiUrl}/auth/google?token=${encodeURIComponent(token)}&state=agenda`,
+      'google_auth_popup',
+      `width=${width},height=${height},left=${left},top=${top},status=no,menubar=no,toolbar=no`
+    );
+
+    // Se popup for bloqueado pelo navegador, redireciona diretamente
+    if (!popup || popup.closed || typeof popup.closed === 'undefined') {
+      window.location.href = `${apiUrl}/auth/google?token=${encodeURIComponent(token)}&state=agenda`;
+    }
   };
 
   // Dias do mês na visualização mensal

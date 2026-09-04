@@ -80,7 +80,11 @@ def _get_google_callback_url(request: Request) -> str:
 
 @router.get("/auth/google")
 @router.get("/google")
-async def google_login(request: Request):
+async def google_login(
+    request: Request,
+    state: Optional[str] = Query(None),
+    token: Optional[str] = Query(None),
+):
     """Inicia o fluxo OAuth com o Google."""
     frontend_url = _get_frontend_url(request)
 
@@ -88,6 +92,13 @@ async def google_login(request: Request):
         return RedirectResponse(url=f"{frontend_url}/login?error=google_not_configured")
 
     callback_url = _get_google_callback_url(request)
+
+    state_payload = state or ""
+    if token and not state:
+        state_payload = f"token:{token}"
+    elif token and state:
+        state_payload = f"{state}|token:{token}"
+
     params = {
         "client_id": settings.GOOGLE_CLIENT_ID,
         "redirect_uri": callback_url,
@@ -96,6 +107,9 @@ async def google_login(request: Request):
         "access_type": "offline",
         "prompt": "consent",
     }
+    if state_payload:
+        params["state"] = state_payload
+
     google_auth_base = settings.GOOGLE_AUTH_URL.rstrip("?")
     google_auth_url = f"{google_auth_base}?{urllib.parse.urlencode(params)}"
     return RedirectResponse(url=google_auth_url)
@@ -106,6 +120,7 @@ async def google_login(request: Request):
 async def google_callback(
     request: Request,
     code: Optional[str] = Query(None),
+    state: Optional[str] = Query(None),
     error: Optional[str] = Query(None),
     db: Session = Depends(database.get_db),
 ):
@@ -165,8 +180,30 @@ async def google_callback(
         picture = google_profile.get("picture", "")
         name = google_profile.get("name") or f"{given_name} {family_name}".strip() or "Usuário Google"
 
-        # 3. Localizar usuário existente ou criar novo
-        user = users_crud.get_user_by_email(db, email=email_clean)
+        # 3. Verificar se o state carrega um token JWT do usuário já logado
+        user = None
+        target_redirect = "/dashboard"
+
+        if state:
+            if "agenda" in state:
+                target_redirect = "/dashboard/agenda"
+
+            if "token:" in state:
+                try:
+                    user_token = state.split("token:")[1].split("|")[0].strip()
+                    payload = security.jwt.decode(
+                        user_token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
+                    )
+                    sub_email = payload.get("sub")
+                    if sub_email:
+                        user = users_crud.get_user_by_email(db, email=sub_email)
+                except Exception as e:
+                    logger.warning(f"Could not parse user token from state: {e}")
+
+        # Se não achou pelo token do state, busca por email
+        if not user:
+            user = users_crud.get_user_by_email(db, email=email_clean)
+
         is_new_user = False
 
         if not user:
@@ -189,7 +226,7 @@ async def google_callback(
             db.commit()
             db.refresh(user)
         else:
-            # Atualizar google_id, avatar e tokens
+            # Atualizar google_id, avatar e tokens sem apagar nenhum dado do usuário
             if not user.google_id:
                 user.google_id = google_id
             if not user.avatar and picture:
@@ -207,7 +244,7 @@ async def google_callback(
         )
 
         return RedirectResponse(
-            url=f"{frontend_url}/auth/callback?token={app_jwt}&isNewUser={'true' if is_new_user else 'false'}"
+            url=f"{frontend_url}/auth/callback?token={app_jwt}&redirect={target_redirect}&isNewUser={'true' if is_new_user else 'false'}"
         )
 
     except Exception as e:

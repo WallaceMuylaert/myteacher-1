@@ -10,6 +10,7 @@ export const OAuthCallback = () => {
 
     useEffect(() => {
         const token = searchParams.get('token');
+        const redirect = searchParams.get('redirect') || '/dashboard';
 
         if (token) {
             localStorage.setItem('token', token);
@@ -18,7 +19,7 @@ export const OAuthCallback = () => {
             // Se foi aberto como popup, comunica a janela pai e fecha o popup
             if (window.opener && !window.opener.closed) {
                 try {
-                    window.opener.postMessage({ type: 'GOOGLE_AUTH_SUCCESS', token }, window.location.origin);
+                    window.opener.postMessage({ type: 'GOOGLE_AUTH_SUCCESS', token, redirect }, window.location.origin);
                     window.close();
                     return;
                 } catch (e) {
@@ -28,7 +29,7 @@ export const OAuthCallback = () => {
 
             // Redirecionamento normal se não for popup
             refreshUser().then(() => {
-                navigate('/dashboard', { replace: true });
+                navigate(redirect, { replace: true });
             });
         } else {
             if (window.opener && !window.opener.closed) {

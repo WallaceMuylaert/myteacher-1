@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import api from '../api';
-import { Plus, Calendar, Pencil, Trash, X, AlertTriangle, GripVertical, ArrowUpDown, BookOpen, Users, Clock, Video, Sparkles, CheckCircle2 } from 'lucide-react';
+import { Plus, Calendar, Pencil, Trash, X, AlertTriangle, GripVertical, ArrowUpDown, BookOpen, Users, Clock, Video, Sparkles, CheckCircle2, ShieldAlert } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Loading } from '../components/Loading';
 import { Toast, type ToastType } from '../components/Toast';
@@ -35,6 +35,7 @@ interface SortableClassCardProps {
     cls: ClassModel;
     index: number;
     isReorderMode: boolean;
+    allClasses: ClassModel[];
     openEditModal: (e: React.MouseEvent, cls: ClassModel) => void;
     openDeleteModal: (e: React.MouseEvent, cls: ClassModel) => void;
 }
@@ -178,7 +179,73 @@ const formatScheduleFromDays = (days: number[], start: string, end: string) => {
     return `${daysStr}, ${start} às ${end}`;
 };
 
-const SortableClassCard = ({ cls, index, isReorderMode, openEditModal, openDeleteModal }: SortableClassCardProps) => {
+interface ScheduleConflict {
+    conflictingClass: ClassModel;
+    overlappingDays: string[];
+    timeRange: string;
+}
+
+const parseClassSchedule = (schedule: string) => {
+    let parsedStart = '10:00';
+    let parsedEnd = '11:30';
+    const timeMatch = (schedule || '').match(/(\d{1,2}:\d{2})\s*(?:às|as|-|to)\s*(\d{1,2}:\d{2})/i);
+    if (timeMatch) {
+        parsedStart = timeMatch[1].padStart(5, '0');
+        parsedEnd = timeMatch[2].padStart(5, '0');
+    }
+    const days: number[] = [];
+    DAYS_CONFIG.forEach(d => {
+        const schedLower = (schedule || '').toLowerCase();
+        if (schedLower.includes(d.short.toLowerCase()) || schedLower.includes(d.label.toLowerCase()) || schedLower.includes(d.name.toLowerCase())) {
+            days.push(d.id);
+        }
+    });
+    return {
+        days: days.length > 0 ? days : [0, 2],
+        start: parsedStart,
+        end: parsedEnd,
+        startM: timeToMinutes(parsedStart),
+        endM: timeToMinutes(parsedEnd)
+    };
+};
+
+const findScheduleConflicts = (
+    currentClassId: number | null,
+    targetDays: number[],
+    targetStart: string,
+    targetEnd: string,
+    allClasses: ClassModel[]
+): ScheduleConflict[] => {
+    if (!targetDays || targetDays.length === 0) return [];
+    const tStartM = timeToMinutes(targetStart);
+    const tEndM = timeToMinutes(targetEnd);
+    if (tStartM >= tEndM) return [];
+
+    const conflicts: ScheduleConflict[] = [];
+
+    for (const cls of allClasses) {
+        if (currentClassId && cls.id === currentClassId) continue;
+        const parsed = parseClassSchedule(cls.schedule || '');
+        const sharedDayIds = targetDays.filter(d => parsed.days.includes(d));
+        if (sharedDayIds.length === 0) continue;
+
+        const overlapStart = Math.max(tStartM, parsed.startM);
+        const overlapEnd = Math.min(tEndM, parsed.endM);
+
+        if (overlapStart < overlapEnd) {
+            const dayNames = sharedDayIds.map(d => DAYS_CONFIG.find(item => item.id === d)?.short || '').filter(Boolean);
+            conflicts.push({
+                conflictingClass: cls,
+                overlappingDays: dayNames,
+                timeRange: `${parsed.start} às ${parsed.end}`
+            });
+        }
+    }
+
+    return conflicts;
+};
+
+const SortableClassCard = ({ cls, index, isReorderMode, allClasses, openEditModal, openDeleteModal }: SortableClassCardProps) => {
     const {
         attributes,
         listeners,
@@ -189,6 +256,11 @@ const SortableClassCard = ({ cls, index, isReorderMode, openEditModal, openDelet
     } = useSortable({ id: cls.id });
 
     const accent = cardAccents[index % cardAccents.length];
+
+    const parsedThis = parseClassSchedule(cls.schedule || '');
+    const cardConflicts = useMemo(() => {
+        return findScheduleConflicts(cls.id, parsedThis.days, parsedThis.start, parsedThis.end, allClasses);
+    }, [cls.id, cls.schedule, allClasses]);
 
     const style = {
         transform: CSS.Transform.toString(transform),
@@ -233,9 +305,16 @@ const SortableClassCard = ({ cls, index, isReorderMode, openEditModal, openDelet
                     {cls.name}
                 </h3>
 
-                <p className="text-text-muted text-sm flex items-center gap-1.5 mb-4">
+                <p className="text-text-muted text-sm flex items-center gap-1.5 mb-2">
                     <Clock size={13} className="text-text-muted/60" /> {cls.schedule}
                 </p>
+
+                {cardConflicts.length > 0 && (
+                    <div className="mb-3 px-2 py-1 rounded-[2px] bg-amber-500/10 border border-amber-500/25 text-amber-500 text-[11px] flex items-center gap-1.5 font-medium">
+                        <AlertTriangle size={12} className="shrink-0" />
+                        <span className="truncate">Choque com <strong>{cardConflicts.map(c => c.conflictingClass.name).join(', ')}</strong></span>
+                    </div>
+                )}
 
                 <div className="flex items-center gap-4 pt-3 border-t border-border">
                     <div className="flex items-center gap-1.5 text-xs text-text-muted">
@@ -306,6 +385,17 @@ export const Classes = () => {
     const [deletingClass, setDeletingClass] = useState<ClassModel | null>(null);
     const [toast, setToast] = useState<{ message: string, type: ToastType } | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [allowCreateConflict, setAllowCreateConflict] = useState(false);
+    const [allowEditConflict, setAllowEditConflict] = useState(false);
+
+    const createConflicts = useMemo(() => {
+        return findScheduleConflicts(null, selectedDays, startTime, endTime, classes);
+    }, [selectedDays, startTime, endTime, classes]);
+
+    const editConflicts = useMemo(() => {
+        if (!editingClass) return [];
+        return findScheduleConflicts(editingClass.id, editSelectedDays, editStartTime, editEndTime, classes);
+    }, [editingClass, editSelectedDays, editStartTime, editEndTime, classes]);
 
     const showToast = (message: string, type: ToastType) => {
         setToast({ message, type });
@@ -444,6 +534,7 @@ export const Classes = () => {
         setSelectedDays(initialDays);
         setStartTime(initialStart);
         setEndTime(initialEnd);
+        setAllowCreateConflict(false);
         setNewClass({
             name: '',
             schedule: formatScheduleFromDays(initialDays, initialStart, initialEnd)
@@ -454,6 +545,10 @@ export const Classes = () => {
 
     const handleCreateClass = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (createConflicts.length > 0 && !allowCreateConflict) {
+            showToast('Existe um choque de horário com outra turma. Marque a confirmação para prosseguir.', 'error');
+            return;
+        }
         setIsSubmitting(true);
         try {
             const safeEndTime = timeToMinutes(endTime) <= timeToMinutes(startTime)
@@ -505,6 +600,10 @@ export const Classes = () => {
     const handleUpdateClass = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!editingClass) return;
+        if (editConflicts.length > 0 && !allowEditConflict) {
+            showToast('Existe um choque de horário com outra turma. Marque a confirmação para prosseguir.', 'error');
+            return;
+        }
         try {
             const safeEndTime = timeToMinutes(editEndTime) <= timeToMinutes(editStartTime)
                 ? addMinutes(editStartTime, 60)
@@ -558,6 +657,7 @@ export const Classes = () => {
         setEditingClass(cls);
         setEditClassName(cls.name);
         setEditClassSchedule(cls.schedule);
+        setAllowEditConflict(false);
 
         // Intelligently parse schedule if available
         let parsedStart = '10:00';
@@ -713,6 +813,7 @@ export const Classes = () => {
                                         cls={cls}
                                         index={index}
                                         isReorderMode={isReorderMode}
+                                        allClasses={classes}
                                         openEditModal={openEditModal}
                                         openDeleteModal={openDeleteModal}
                                     />
@@ -956,6 +1057,38 @@ export const Classes = () => {
                                 )}
                             </div>
 
+                            {/* Alerta de Conflito de Horário */}
+                            {createConflicts.length > 0 && (
+                                <div className="p-3.5 rounded-[3px] border border-amber-500/30 bg-amber-500/10 space-y-2.5 animate-fade-in">
+                                    <div className="flex items-start gap-2.5 text-amber-500">
+                                        <ShieldAlert size={18} className="shrink-0 mt-0.5" />
+                                        <div className="space-y-1">
+                                            <p className="text-xs font-bold leading-tight">Choque de horário detectado!</p>
+                                            <p className="text-[11px] text-text-muted">
+                                                Esta turma coincide com horário(s) de outra(s) turma(s):
+                                            </p>
+                                            <ul className="space-y-1 pt-1">
+                                                {createConflicts.map((c, i) => (
+                                                    <li key={i} className="text-xs flex items-center gap-1.5 text-text-main font-medium">
+                                                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
+                                                        <span><strong>{c.conflictingClass.name}</strong> ({c.overlappingDays.join(', ')}, {c.timeRange})</span>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    </div>
+                                    <label className="flex items-center gap-2 cursor-pointer pt-2 border-t border-amber-500/20 text-xs text-text-main font-medium">
+                                        <input
+                                            type="checkbox"
+                                            checked={allowCreateConflict}
+                                            onChange={e => setAllowCreateConflict(e.target.checked)}
+                                            className="w-3.5 h-3.5 rounded text-amber-500 focus:ring-amber-500 cursor-pointer"
+                                        />
+                                        <span>Estou ciente e desejo cadastrar mesmo com o choque de horário</span>
+                                    </label>
+                                </div>
+                            )}
+
                             <div className="flex justify-end gap-2.5 mt-2 pt-2 border-t border-border">
                                 <button
                                     type="button"
@@ -967,7 +1100,7 @@ export const Classes = () => {
                                 </button>
                                 <button
                                     type="submit"
-                                    disabled={isSubmitting || !newClass.name.trim()}
+                                    disabled={isSubmitting || !newClass.name.trim() || (createConflicts.length > 0 && !allowCreateConflict)}
                                     className="btn btn-primary px-5 py-2 text-text-main rounded-[2px] font-semibold text-xs cursor-pointer disabled:opacity-50"
                                 >
                                     {isSubmitting ? 'Criando Turma...' : 'Criar Turma'}
@@ -1155,6 +1288,38 @@ export const Classes = () => {
                                 )}
                             </div>
 
+                            {/* Alerta de Conflito de Horário na Edição */}
+                            {editConflicts.length > 0 && (
+                                <div className="p-3.5 rounded-[3px] border border-amber-500/30 bg-amber-500/10 space-y-2.5 animate-fade-in">
+                                    <div className="flex items-start gap-2.5 text-amber-500">
+                                        <ShieldAlert size={18} className="shrink-0 mt-0.5" />
+                                        <div className="space-y-1">
+                                            <p className="text-xs font-bold leading-tight">Choque de horário detectado!</p>
+                                            <p className="text-[11px] text-text-muted">
+                                                O novo horário coincide com o de outra(s) turma(s):
+                                            </p>
+                                            <ul className="space-y-1 pt-1">
+                                                {editConflicts.map((c, i) => (
+                                                    <li key={i} className="text-xs flex items-center gap-1.5 text-text-main font-medium">
+                                                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
+                                                        <span><strong>{c.conflictingClass.name}</strong> ({c.overlappingDays.join(', ')}, {c.timeRange})</span>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    </div>
+                                    <label className="flex items-center gap-2 cursor-pointer pt-2 border-t border-amber-500/20 text-xs text-text-main font-medium">
+                                        <input
+                                            type="checkbox"
+                                            checked={allowEditConflict}
+                                            onChange={e => setAllowEditConflict(e.target.checked)}
+                                            className="w-3.5 h-3.5 rounded text-amber-500 focus:ring-amber-500 cursor-pointer"
+                                        />
+                                        <span>Estou ciente e desejo salvar mesmo com o choque de horário</span>
+                                    </label>
+                                </div>
+                            )}
+
                             <div className="flex justify-end gap-2.5 mt-2 pt-2 border-t border-border">
                                 <button
                                     type="button"
@@ -1165,8 +1330,8 @@ export const Classes = () => {
                                 </button>
                                 <button
                                     type="submit"
-                                    disabled={!editClassName.trim()}
-                                    className="btn btn-primary px-5 py-2 text-text-main rounded-[2px] font-semibold text-xs cursor-pointer"
+                                    disabled={!editClassName.trim() || (editConflicts.length > 0 && !allowEditConflict)}
+                                    className="btn btn-primary px-5 py-2 text-text-main rounded-[2px] font-semibold text-xs cursor-pointer disabled:opacity-50"
                                 >
                                     Salvar Alterações
                                 </button>

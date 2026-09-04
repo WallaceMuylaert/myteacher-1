@@ -14,6 +14,7 @@ from backend.models.classes import Class
 from backend.models.attendance import AttendanceSession
 from backend.schemas.calendar import (
     CalendarEventCreate,
+    RecurringCalendarEventCreate,
     CalendarEventUpdate,
     CalendarEventResponse,
     HolidayItem,
@@ -398,6 +399,133 @@ async def create_calendar_event(
         google_event_id=new_event.google_event_id,
         source="local",
     )
+
+
+@router.post("/calendar/events/recurring", response_model=List[CalendarEventResponse])
+async def create_recurring_calendar_events(
+    payload: RecurringCalendarEventCreate,
+    db: Session = Depends(database.get_db),
+    current_user: User = Depends(security.get_current_user),
+):
+    """Cria eventos recorrentes para uma turma ou compromisso semanal."""
+    if not payload.days_of_week:
+        raise HTTPException(status_code=400, detail="Selecione pelo menos um dia da semana.")
+
+    # Parse start and end time (e.g. "10:00", "11:30")
+    try:
+        sh, sm = map(int, payload.start_time_str.split(":"))
+        eh, em = map(int, payload.end_time_str.split(":"))
+    except Exception:
+        raise HTTPException(status_code=400, detail="Formato de horário inválido (use HH:MM).")
+
+    base_date = date.today()
+    if payload.start_date:
+        try:
+            base_date = date.fromisoformat(payload.start_date)
+        except Exception:
+            pass
+
+    weeks = max(1, min(payload.weeks_count or 12, 52))
+    days_set = set(payload.days_of_week)
+
+    google_token = None
+    if payload.sync_google and (current_user.google_access_token or current_user.google_refresh_token):
+        google_token = await _refresh_google_token_if_needed(current_user, db)
+
+    time_zone = settings.GOOGLE_CALENDAR_TIMEZONE or "America/Sao_Paulo"
+    class_name = None
+    if payload.class_id:
+        c = db.query(Class).filter(Class.id == payload.class_id).first()
+        if c:
+            class_name = c.name
+
+    created_events: List[CalendarEvent] = []
+
+    total_days = weeks * 7
+    for day_offset in range(total_days):
+        current_d = base_date + timedelta(days=day_offset)
+        if current_d.weekday() in days_set:
+            event_start = datetime.combine(current_d, datetime.min.time().replace(hour=sh, minute=sm))
+            event_end = datetime.combine(current_d, datetime.min.time().replace(hour=eh, minute=em))
+
+            google_event_id = None
+            loc_or_link = payload.location_or_link
+
+            if google_token:
+                try:
+                    event_body = {
+                        "summary": payload.title,
+                        "description": payload.description or "",
+                        "start": {"dateTime": event_start.isoformat(), "timeZone": time_zone},
+                        "end": {"dateTime": event_end.isoformat(), "timeZone": time_zone},
+                    }
+                    query_params = {}
+                    if payload.generate_meet_link:
+                        event_body["conferenceData"] = {
+                            "createRequest": {
+                                "requestId": f"meet_{int(event_start.timestamp())}_{current_d.isoformat()}",
+                                "conferenceSolutionKey": {"type": "hangoutsMeet"},
+                            }
+                        }
+                        query_params["conferenceDataVersion"] = "1"
+
+                    async with httpx.AsyncClient(timeout=8.0) as client:
+                        res = await client.post(
+                            settings.GOOGLE_CALENDAR_API_URL,
+                            headers={"Authorization": f"Bearer {google_token}"},
+                            json=event_body,
+                            params=query_params,
+                        )
+                        if res.status_code in (200, 201):
+                            g_data = res.json()
+                            google_event_id = g_data.get("id")
+                            meet_url = g_data.get("hangoutLink")
+                            if meet_url and not loc_or_link:
+                                loc_or_link = meet_url
+                except Exception as e:
+                    logger.error(f"Error creating Google Calendar recurring event instance: {e}")
+
+            ev = CalendarEvent(
+                user_id=current_user.id,
+                title=payload.title,
+                description=payload.description,
+                start_time=event_start,
+                end_time=event_end,
+                all_day=False,
+                category=payload.category or "lesson",
+                color=payload.color or "#10b981",
+                location_or_link=loc_or_link,
+                class_id=payload.class_id,
+                google_event_id=google_event_id,
+            )
+            db.add(ev)
+            created_events.append(ev)
+
+    db.commit()
+
+    results = []
+    for ev in created_events:
+        db.refresh(ev)
+        results.append(
+            CalendarEventResponse(
+                id=f"local_{ev.id}",
+                user_id=ev.user_id,
+                title=ev.title,
+                description=ev.description,
+                start_time=ev.start_time,
+                end_time=ev.end_time,
+                all_day=ev.all_day,
+                category=ev.category,
+                color=ev.color,
+                location_or_link=ev.location_or_link,
+                class_id=ev.class_id,
+                class_name=class_name,
+                google_event_id=ev.google_event_id,
+                source="local",
+            )
+        )
+
+    return results
 
 
 @router.put("/calendar/events/{event_id}", response_model=CalendarEventResponse)

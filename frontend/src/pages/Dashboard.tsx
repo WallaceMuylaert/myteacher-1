@@ -1,8 +1,24 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import api from '../api';
 import { useAuth } from '../context/AuthContext';
 import { Loading } from '../components/Loading';
-import { AlertCircle, GraduationCap, ClipboardList, ArrowRight, X, HelpCircle, Users } from 'lucide-react';
+import { 
+    AlertCircle, 
+    GraduationCap, 
+    ClipboardList, 
+    ArrowRight, 
+    X, 
+    HelpCircle, 
+    Users, 
+    Clock, 
+    Video, 
+    Calendar, 
+    BookOpen, 
+    CheckCircle2, 
+    Search,
+    Check,
+    History
+} from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Toast, type ToastType } from '../components/Toast';
 
@@ -17,9 +33,6 @@ interface DashboardStats {
         total: number;
     };
     payments: {
-        // Atenção: current_month/current_year são o número do mês e o ano, não
-        // valores. paid/pending/total_expected são CONTAGENS de mensalidades,
-        // não dinheiro. Ver backend/crud/dashboard.py.
         current_month: number;
         current_year: number;
         paid: number;
@@ -28,13 +41,55 @@ interface DashboardStats {
     };
 }
 
+interface TodayClass {
+    id: number;
+    name: string;
+    schedule: string;
+    today_time: string;
+    student_count: number;
+    has_attendance_today: boolean;
+    start_minutes: number;
+    meet_link?: string;
+}
+
 const MONTHS = [
     'janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
     'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro',
 ];
 
-// Uma barra que é uma linha: cheia na cor de sucesso significa mês fechado. O que falta é
-// o que escreve no traço, e é isso que o professor está procurando.
+const DAY_MATCHERS: { [key: number]: string[] } = {
+    0: ['domingo', 'domingos', 'dom'],
+    1: ['segunda', 'segundas', 'seg'],
+    2: ['terça', 'terças', 'ter'],
+    3: ['quarta', 'quartas', 'qua'],
+    4: ['quinta', 'quintas', 'qui'],
+    5: ['sexta', 'sextas', 'sex'],
+    6: ['sábado', 'sábados', 'sab', 'sáb'],
+};
+
+const isClassToday = (schedule: string, jsDay: number): boolean => {
+    if (!schedule) return false;
+    const lower = schedule.toLowerCase();
+    const matchers = DAY_MATCHERS[jsDay] || [];
+    return matchers.some(m => lower.includes(m));
+};
+
+const extractTimeRange = (schedule: string): string => {
+    const match = schedule.match(/(\d{1,2}:\d{2})\s*(?:às|as|-|to)\s*(\d{1,2}:\d{2})/i);
+    if (match) return `${match[1]} às ${match[2]}`;
+    const singleMatch = schedule.match(/(\d{1,2}:\d{2})/);
+    if (singleMatch) return singleMatch[1];
+    return schedule || 'Horário a definir';
+};
+
+const extractStartMinutes = (schedule: string, todayTime: string): number => {
+    const combined = `${todayTime} ${schedule}`;
+    const match = combined.match(/(\d{1,2}):(\d{2})/);
+    if (!match) return 9999;
+    return parseInt(match[1], 10) * 60 + parseInt(match[2], 10);
+};
+
+// Uma barra que é uma linha: cheia na cor de sucesso significa mês fechado.
 const ClosingBar = ({ paid, pending }: { paid: number; pending: number }) => {
     const total = paid + pending;
     if (total === 0) {
@@ -66,6 +121,9 @@ export const Dashboard = () => {
     const { user } = useAuth();
 
     const [stats, setStats] = useState<DashboardStats | null>(null);
+    const [todayClasses, setTodayClasses] = useState<TodayClass[]>([]);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'completed'>('all');
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [hideTutorial, setHideTutorial] = useState(() => localStorage.getItem('hideTutorial') === 'true');
@@ -86,10 +144,79 @@ export const Dashboard = () => {
     };
 
     useEffect(() => {
-        const fetchStats = async () => {
+        const fetchDashboardData = async () => {
             try {
-                const res = await api.get('/dashboard/stats');
-                setStats(res.data);
+                const now = new Date();
+                const jsDay = now.getDay();
+                
+                // Formato local YYYY-MM-DD para checagem precisa
+                const localYear = now.getFullYear();
+                const localMonth = String(now.getMonth() + 1).padStart(2, '0');
+                const localDay = String(now.getDate()).padStart(2, '0');
+                const todayDateStr = `${localYear}-${localMonth}-${localDay}`;
+
+                const [statsRes, classesRes, eventsRes] = await Promise.all([
+                    api.get('/dashboard/stats'),
+                    api.get('/classes/').catch(() => ({ data: [] })),
+                    api.get(`/calendar/events?start_date=${todayDateStr}&end_date=${todayDateStr}`).catch(() => ({ data: [] }))
+                ]);
+
+                setStats(statsRes.data);
+
+                if (classesRes.data && Array.isArray(classesRes.data)) {
+                    const matched = await Promise.all(
+                        classesRes.data.map(async (cls: any) => {
+                            const isToday = isClassToday(cls.schedule, jsDay);
+                            const matchingEvent = eventsRes.data?.find((e: any) => e.class_id === cls.id);
+                            
+                            if (isToday || matchingEvent) {
+                                let studentCount = 0;
+                                let hasAttendanceToday = false;
+
+                                try {
+                                    const [stRes, attRes] = await Promise.all([
+                                        api.get(`/classes/${cls.id}/students`).catch(() => ({ data: [] })),
+                                        api.get(`/classes/${cls.id}/attendance`).catch(() => ({ data: [] }))
+                                    ]);
+                                    studentCount = stRes.data?.length ?? 0;
+                                    
+                                    if (Array.isArray(attRes.data)) {
+                                        hasAttendanceToday = attRes.data.some((session: any) => {
+                                            if (!session.date) return false;
+                                            return session.date === todayDateStr || session.date.startsWith(todayDateStr);
+                                        });
+                                    }
+                                } catch {
+                                    studentCount = 0;
+                                    hasAttendanceToday = false;
+                                }
+
+                                const eventTime = matchingEvent?.start_time && matchingEvent?.end_time
+                                    ? `${matchingEvent.start_time.slice(11, 16)} às ${matchingEvent.end_time.slice(11, 16)}`
+                                    : extractTimeRange(cls.schedule);
+
+                                const startMinutes = extractStartMinutes(cls.schedule, eventTime);
+
+                                return {
+                                    id: cls.id,
+                                    name: cls.name,
+                                    schedule: cls.schedule,
+                                    today_time: eventTime,
+                                    student_count: studentCount,
+                                    has_attendance_today: hasAttendanceToday,
+                                    start_minutes: startMinutes,
+                                    meet_link: matchingEvent?.location_or_link || matchingEvent?.meet_link
+                                };
+                            }
+                            return null;
+                        })
+                    );
+                    
+                    const validClasses = matched.filter(Boolean) as TodayClass[];
+                    // Ordena cronologicamente pelo horário de início
+                    validClasses.sort((a, b) => a.start_minutes - b.start_minutes);
+                    setTodayClasses(validClasses);
+                }
             } catch (err: any) {
                 console.error('Error fetching dashboard stats:', err);
                 setError(err.message || 'Erro ao carregar dados');
@@ -97,8 +224,25 @@ export const Dashboard = () => {
                 setIsLoading(false);
             }
         };
-        fetchStats();
+        fetchDashboardData();
     }, []);
+
+    const pendingCount = useMemo(() => todayClasses.filter(c => !c.has_attendance_today).length, [todayClasses]);
+    const completedCount = useMemo(() => todayClasses.filter(c => c.has_attendance_today).length, [todayClasses]);
+
+    const filteredClasses = useMemo(() => {
+        return todayClasses.filter(cls => {
+            const matchesSearch = cls.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                cls.today_time.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                cls.schedule.toLowerCase().includes(searchTerm.toLowerCase());
+            
+            if (!matchesSearch) return false;
+
+            if (filterStatus === 'pending') return !cls.has_attendance_today;
+            if (filterStatus === 'completed') return cls.has_attendance_today;
+            return true;
+        });
+    }, [todayClasses, searchTerm, filterStatus]);
 
     if (isLoading) {
         return (
@@ -129,14 +273,21 @@ export const Dashboard = () => {
     const { paid, pending, total_expected } = stats.payments;
     const settled = total_expected > 0 && pending === 0;
 
+    const formattedTodayDate = new Date().toLocaleDateString('pt-BR', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long'
+    });
+
     return (
-        <div className="animate-slide-up">
+        <div className="animate-slide-up space-y-6">
             {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+            
             <header className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
                 <div>
                     <h1 className="text-2xl sm:text-3xl font-bold text-text-main">Olá, {firstName}</h1>
-                    <p className="text-text-muted mt-1.5">
-                        Situação de {monthName} de {stats.payments.current_year}.
+                    <p className="text-text-muted mt-1.5 capitalize">
+                        {formattedTodayDate} • Situação de {monthName} de {stats.payments.current_year}.
                     </p>
                 </div>
                 {hideTutorial && (
@@ -153,8 +304,207 @@ export const Dashboard = () => {
                 )}
             </header>
 
+            {/* Aulas de Hoje */}
+            <section className="sheet sheet-p">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                    <div className="flex items-center gap-2.5">
+                        <div className="p-2 rounded-[2px] bg-primary/15 border border-primary/20 text-primary">
+                            <Clock size={18} />
+                        </div>
+                        <div>
+                            <h2 className="text-lg font-bold text-text-main flex items-center gap-2">
+                                Aulas de hoje
+                                {todayClasses.length > 0 && (
+                                    <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-primary/15 text-primary border border-primary/20">
+                                        {completedCount}/{todayClasses.length} chamadas feitas
+                                    </span>
+                                )}
+                            </h2>
+                            <p className="text-xs text-text-muted capitalize">
+                                {todayClasses.length === 0 
+                                    ? 'Nenhum horário marcado para hoje' 
+                                    : `${pendingCount} pendente${pendingCount !== 1 ? 's' : ''} • ${completedCount} realizada${completedCount !== 1 ? 's' : ''}`}
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-3">
+                        <Link to="/dashboard/agenda" className="text-xs font-semibold text-primary no-underline hover:underline flex items-center gap-1 shrink-0">
+                            <Calendar size={13} />
+                            <span>Ver agenda completa</span>
+                            <ArrowRight size={13} />
+                        </Link>
+                    </div>
+                </div>
+
+                {todayClasses.length > 0 && (
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 mb-4 pb-3 border-b border-border">
+                        {/* Filtros de Status */}
+                        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+                            <button
+                                onClick={() => setFilterStatus('all')}
+                                className={`px-2.5 py-1 text-xs font-semibold rounded-[2px] border transition-all cursor-pointer whitespace-nowrap ${
+                                    filterStatus === 'all'
+                                        ? 'bg-primary text-[var(--on-institution)] border-primary'
+                                        : 'bg-[var(--wash-1)] text-text-muted hover:text-text-main border-border'
+                                }`}
+                            >
+                                Todas ({todayClasses.length})
+                            </button>
+                            <button
+                                onClick={() => setFilterStatus('pending')}
+                                className={`px-2.5 py-1 text-xs font-semibold rounded-[2px] border transition-all cursor-pointer whitespace-nowrap flex items-center gap-1 ${
+                                    filterStatus === 'pending'
+                                        ? 'bg-amber-600 text-white border-amber-600'
+                                        : 'bg-[var(--wash-1)] text-text-muted hover:text-text-main border-border'
+                                }`}
+                            >
+                                Pendentes ({pendingCount})
+                            </button>
+                            <button
+                                onClick={() => setFilterStatus('completed')}
+                                className={`px-2.5 py-1 text-xs font-semibold rounded-[2px] border transition-all cursor-pointer whitespace-nowrap flex items-center gap-1 ${
+                                    filterStatus === 'completed'
+                                        ? 'bg-emerald-600 text-white border-emerald-600'
+                                        : 'bg-[var(--wash-1)] text-text-muted hover:text-text-main border-border'
+                                }`}
+                            >
+                                <Check size={12} />
+                                Realizadas ({completedCount})
+                            </button>
+                        </div>
+
+                        {/* Campo de Busca Rápida */}
+                        {todayClasses.length >= 3 && (
+                            <div className="relative flex items-center min-w-[200px]">
+                                <Search size={13} className="absolute left-2.5 text-text-muted pointer-events-none" />
+                                <input
+                                    type="text"
+                                    placeholder="Buscar turma ou horário..."
+                                    value={searchTerm}
+                                    onChange={e => setSearchTerm(e.target.value)}
+                                    className="w-full bg-[var(--wash-1)] text-xs text-text-main rounded-[2px] border border-border pl-8 pr-7 py-1.5 focus:outline-none focus:border-primary transition-all placeholder:text-text-muted/60"
+                                />
+                                {searchTerm && (
+                                    <button
+                                        onClick={() => setSearchTerm('')}
+                                        className="absolute right-2 text-text-muted hover:text-text-main"
+                                    >
+                                        <X size={12} />
+                                    </button>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {todayClasses.length === 0 ? (
+                    <div className="p-6 rounded-[2px] border border-dashed border-border bg-[var(--wash-1)] text-center flex flex-col items-center justify-center gap-1.5">
+                        <div className="p-2.5 rounded-full bg-primary/10 text-primary mb-1">
+                            <BookOpen size={20} />
+                        </div>
+                        <p className="text-sm font-semibold text-text-main">Nenhuma aula programada para hoje</p>
+                        <p className="text-xs text-text-muted max-w-md">
+                            Aproveite o dia livre para preparar planos de aula, revisar notas ou lançar frequências pendentes.
+                        </p>
+                    </div>
+                ) : filteredClasses.length === 0 ? (
+                    <div className="p-6 text-center text-text-muted text-xs border border-dashed border-border rounded-[2px]">
+                        Nenhuma turma encontrada com o filtro selecionado.
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                        {filteredClasses.map((item) => {
+                            const isDone = item.has_attendance_today;
+
+                            return (
+                                <div
+                                    key={item.id}
+                                    className={`p-4 rounded-[3px] border transition-all flex flex-col justify-between group shadow-sm ${
+                                        isDone
+                                            ? 'bg-[var(--wash-1)] border-border hover:border-emerald-500/40 opacity-90'
+                                            : 'bg-bg-card border-primary/30 hover:border-primary shadow-sm hover:shadow'
+                                    }`}
+                                >
+                                    <div>
+                                        <div className="flex items-center justify-between gap-2 mb-2">
+                                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-[2px] text-xs font-bold font-mono border ${
+                                                isDone
+                                                    ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+                                                    : 'bg-primary/15 text-primary border-primary/25'
+                                            }`}>
+                                                <Clock size={11} /> {item.today_time}
+                                            </span>
+
+                                            {isDone ? (
+                                                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-[2px] border border-emerald-500/20">
+                                                    <CheckCircle2 size={12} /> Feita
+                                                </span>
+                                            ) : (
+                                                <span className="text-[11px] text-amber-500 font-semibold flex items-center gap-1">
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                                                    Pendente
+                                                </span>
+                                            )}
+                                        </div>
+
+                                        <h3 className="font-bold text-text-main group-hover:text-primary transition-colors text-base leading-snug">
+                                            {item.name}
+                                        </h3>
+
+                                        <div className="flex items-center justify-between gap-2 mt-1.5 text-xs text-text-muted">
+                                            <span className="flex items-center gap-1">
+                                                <Users size={12} className="text-primary/70" /> {item.student_count ?? 0} {item.student_count === 1 ? 'aluno' : 'alunos'}
+                                            </span>
+                                            {item.schedule && (
+                                                <span className="truncate max-w-[140px] text-[11px] opacity-70" title={item.schedule}>
+                                                    {item.schedule}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-4 pt-3 border-t border-border flex items-center gap-2">
+                                        {item.meet_link && (
+                                            <a
+                                                href={item.meet_link}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="p-2 rounded-[2px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors"
+                                                title="Entrar no Google Meet"
+                                            >
+                                                <Video size={14} />
+                                            </a>
+                                        )}
+                                        
+                                        {isDone ? (
+                                            <Link
+                                                to={`/dashboard/class/${item.id}?tab=history`}
+                                                className="px-3 py-1.5 rounded-[2px] text-xs font-semibold border border-border bg-[var(--wash-2)] text-text-muted hover:text-text-main hover:border-border transition-all flex-1 flex items-center justify-center gap-1.5 no-underline hover:bg-[var(--wash-1)]"
+                                                title="Ver histórico de chamadas e aulas anteriores desta turma"
+                                            >
+                                                <History size={13} className="text-emerald-500" />
+                                                <span>Ver Histórico</span>
+                                            </Link>
+                                        ) : (
+                                            <Link
+                                                to={`/dashboard/class/${item.id}`}
+                                                className="btn btn-primary text-xs py-1.5 px-3 flex-1 flex items-center justify-center gap-1.5 font-bold no-underline shadow-sm"
+                                            >
+                                                <ClipboardList size={13} />
+                                                <span>Fazer Chamada</span>
+                                            </Link>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
+            </section>
+
             {isFirstTime && (
-                <section className="sheet sheet-p mt-8 relative">
+                <section className="sheet sheet-p relative">
                     <button
                         onClick={handleDismissTutorial}
                         className="absolute top-3 right-3 p-2 text-text-muted hover:text-text-main hover:bg-[var(--wash-2)] rounded-[2px] transition-colors duration-150"
@@ -194,7 +544,7 @@ export const Dashboard = () => {
 
             {/* O fechamento do mês: a pergunta que o professor abre o sistema
                 para responder, respondida antes de qualquer clique. */}
-            <section className="sheet sheet-p mt-8">
+            <section className="sheet sheet-p">
                 <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
                     <h2 className="text-lg font-semibold text-text-main">Fechamento de {monthName}</h2>
                     <Link to="/dashboard/payments" className="text-sm font-semibold text-primary no-underline hover:underline">

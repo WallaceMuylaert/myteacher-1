@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../api';
 import { Plus, Save, Calendar, Users, X, FileText, Pencil, Trash2, AlertTriangle, Eye, Download, BookOpen, ClipboardList, History, ArrowLeft, DollarSign, GraduationCap, ArrowRight } from 'lucide-react';
 import { formatPhone, unmaskPhone, formatCurrency, parseCurrency } from '../utils/masks';
@@ -74,13 +74,24 @@ interface PaymentInput {
 export const ClassDetails = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
     const [classData, setClassData] = useState<ClassModel | null>(null);
     const [students, setStudents] = useState<Student[]>([]);
     const [allStudents, setAllStudents] = useState<Student[]>([]);
     const [sessions, setSessions] = useState<AttendanceSession[]>([]);
 
-    const [activeTab, setActiveTab] = useState<'attendance' | 'students' | 'history' | 'payments'>('attendance');
+    const initialTab = searchParams.get('tab');
+    const [activeTab, setActiveTab] = useState<'attendance' | 'students' | 'history' | 'payments'>(
+        initialTab === 'history' || initialTab === 'students' || initialTab === 'payments' ? initialTab : 'attendance'
+    );
     const [showEnrollModal, setShowEnrollModal] = useState(false);
+
+    useEffect(() => {
+        const tab = searchParams.get('tab');
+        if (tab === 'history' || tab === 'students' || tab === 'payments' || tab === 'attendance') {
+            setActiveTab(tab);
+        }
+    }, [searchParams]);
 
     // Payments Local State
     const [localPayments, setLocalPayments] = useState<Record<number, PaymentInput>>({});

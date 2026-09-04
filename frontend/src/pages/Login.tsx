@@ -57,22 +57,24 @@ export const Login = () => {
 
     const muiTheme = useMemo(() => {
         const dark = appTheme === 'ardosia';
+        const isAlmaco = appTheme === 'almaco';
+
         return createTheme({
             palette: {
                 mode: dark ? 'dark' : 'light',
                 primary: {
-                    main: dark ? PALETTE.institutionDark : PALETTE.institution,
-                    dark: PALETTE.institutionPressed,
-                    light: PALETTE.institutionLight,
+                    main: dark ? PALETTE.institutionDark : (isAlmaco ? '#0277bd' : PALETTE.institution),
+                    dark: dark ? PALETTE.institutionPressed : (isAlmaco ? '#01579b' : PALETTE.institutionPressed),
+                    light: dark ? PALETTE.institutionLight : (isAlmaco ? '#29b6f6' : PALETTE.institutionLight),
                     contrastText: dark ? PALETTE.ink : '#ffffff',
                 },
                 background: {
-                    default: dark ? '#001D39' : '#eef4f9',
-                    paper: dark ? '#0b2c4f' : '#ffffff',
+                    default: dark ? '#001D39' : (isAlmaco ? '#cde2f1' : '#f6f8fb'),
+                    paper: dark ? '#0b2c4f' : (isAlmaco ? '#f0f7fc' : '#ffffff'),
                 },
                 text: {
-                    primary: dark ? PALETTE.inkDark : PALETTE.ink,
-                    secondary: dark ? '#a3c3d8' : '#46617c',
+                    primary: dark ? PALETTE.inkDark : (isAlmaco ? '#001e3d' : PALETTE.ink),
+                    secondary: dark ? '#a3c3d8' : (isAlmaco ? '#244b6e' : '#46617c'),
                 },
             },
             shape: { borderRadius: 3 },

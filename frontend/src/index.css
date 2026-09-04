@@ -218,32 +218,31 @@
   --color-border: var(--rule);
 }
 
-/* Almaço — a folha pautada envelhecida. Papel mais quente para sessões longas
-   no fim do dia; a tinta e o carimbo não mudam. */
+/* Almaço — a folha azulada com alto contraste entre folha e mesa */
 .theme-almaco {
   color-scheme: light;
 
-  --sheet: #f7fbfd;
-  --desk: #dfeaf1;
-  --desk-sunk: #cfdfe9;
-  --ink: #001D39;
-  --ink-muted: #3f5b74;
-  --ink-faint: #5c7488;
-  --rule: #c9dce7;
-  --rule-strong: #a7c3d4;
+  --sheet: #f0f7fc;
+  --desk: #cde2f1;
+  --desk-sunk: #b8d6ec;
+  --ink: #001e3d;
+  --ink-muted: #244b6e;
+  --ink-faint: #41688d;
+  --rule: #a6cae2;
+  --rule-strong: #78a9cb;
 
-  --institution: #0A4174;
-  --institution-pressed: #001D39;
-  --institution-light: #49769F;
-  --ochre: #8a6216;
-  --margin-red: #a33124;
+  --institution: #0277bd;
+  --institution-pressed: #01579b;
+  --institution-light: #29b6f6;
+  --ochre: #9c6e1b;
+  --margin-red: #b92b1b;
 
-  --wash-1: rgba(0, 29, 57, 0.035);
-  --wash-2: rgba(0, 29, 57, 0.07);
-  --scrim: rgba(0, 29, 57, 0.32);
+  --wash-1: rgba(2, 119, 189, 0.05);
+  --wash-2: rgba(2, 119, 189, 0.10);
+  --scrim: rgba(0, 30, 61, 0.35);
 
-  --shadow-raised: 0 1px 2px rgba(0, 29, 57, .06), 0 8px 24px -6px rgba(0, 29, 57, .14);
-  --shadow-overlay: 0 2px 4px rgba(0, 29, 57, .08), 0 24px 48px -12px rgba(0, 29, 57, .24);
+  --shadow-raised: 0 1px 3px rgba(0, 30, 61, .08), 0 8px 24px -6px rgba(0, 30, 61, .18);
+  --shadow-overlay: 0 2px 4px rgba(0, 30, 61, .10), 0 24px 48px -12px rgba(0, 30, 61, .28);
 
   --color-sheet: var(--sheet);
   --color-desk: var(--desk);
@@ -262,7 +261,7 @@
   --color-bg-darker: var(--desk-sunk);
   --color-text-main: var(--ink);
   --color-text-muted: var(--ink-muted);
-  --color-success: #237a57;
+  --color-success: #1b7a54;
   --color-warning: var(--ochre);
   --color-danger: var(--margin-red);
   --color-border: var(--rule);

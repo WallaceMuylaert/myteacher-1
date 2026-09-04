@@ -398,8 +398,8 @@ const ThemeFeatureCell = () => {
     const { theme, setTheme } = useTheme();
 
     const themesList = [
-        { id: 'registro', label: 'Registro', desc: 'Papel Claro', bg: '#faf7f0', border: '#d9d0be', text: '#001D39', accent: '#0A4174' },
-        { id: 'almaco', label: 'Almaço', desc: 'Azulado', bg: '#eef4f9', border: '#b9d2e7', text: '#001D39', accent: '#0A4174' },
+        { id: 'registro', label: 'Registro', desc: 'Papel Claro', bg: '#ffffff', border: '#cbd5e1', text: '#001D39', accent: '#0A4174' },
+        { id: 'almaco', label: 'Almaço', desc: 'Azul Intenso', bg: '#f0f7fc', border: '#78a9cb', text: '#001e3d', accent: '#0277bd' },
         { id: 'ardosia', label: 'Ardósia', desc: 'Lousa Escura', bg: '#001D39', border: '#0A4174', text: '#e7f3fa', accent: '#7BBDE8' },
     ];
 
